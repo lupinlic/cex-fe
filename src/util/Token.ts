@@ -1,4 +1,3 @@
-import { is } from "@react-three/fiber/dist/declarations/src/core/utils";
 
 // types/token.ts
 export interface Token {

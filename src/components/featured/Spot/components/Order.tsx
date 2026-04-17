@@ -403,7 +403,7 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
                 avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
 
               return (
-                <div className="border border-border rounded-xl p-4">
+                <div key={asset.id} className="border border-border rounded-xl p-4">
                   {/* Header */}
                   <div className="flex items-center gap-2 mb-4">
                     <img
