@@ -38,6 +38,7 @@ export default function PriceBar({
   }, [ticker?.lastPrice]);
 
   const lastPriceNumber = Number(ticker?.lastPrice ?? 0);
+  console.log("Ticker :", ticker);
 
 
   return (
@@ -121,7 +122,7 @@ export default function PriceBar({
         </ActiveDropdown>
 
         <p className={`${color} text-[20px] mx-2`}>
-          {lastPriceNumber.toLocaleString(undefined, {
+          {lastPriceNumber.toLocaleString("vi-VN", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}

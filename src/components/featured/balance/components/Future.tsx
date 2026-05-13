@@ -1,47 +1,81 @@
 "use client";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useBalanceStore } from "@/store/balanceStore";
+
+interface FutureItem {
+  token: { asset: string };
+  available?: string;
+  reserved?: string;
+  locked?: string;
+}
 
 export default function FutureView() {
   const [hideZero, setHideZero] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const router = useRouter();
+  const { balances, rates, isLoading, error } = useBalanceStore();
 
-  const assets = [
-    {
-      coin: "ETH",
-      icon: "https://image.myx.finance/s3/67cfe6d7e4b06079318bb24e.webp",
-      balance: 0.0000989,
-      available: 0.0000989,
-      reserved: 0,
-      avgPrice: null,
-      pnl: null,
-      vndValue: 10884.78,
-    },
-    {
-      coin: "BTC",
-      icon: "https://image.myx.finance/s3/67da721fe4b06079cab893b5.webp",
-      balance: 0,
-      available: 0,
-      reserved: 0,
-      avgPrice: null,
-      pnl: null,
-      vndValue: 0,
-    },
-  ];
+  const assets = useMemo(() => {
+    if (!balances?.futures) return [];
+
+    return balances.futures.map((item: FutureItem) => {
+      const coin = item.token.asset;
+      const price = rates[coin?.toUpperCase()] || 0;
+      const balance =
+        parseFloat(item.available || "0") + parseFloat(item.reserved || "0");
+
+      return {
+        coin,
+        icon: `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${coin.toLowerCase()}.png`|| "/logo.png",
+        balance,
+        available: parseFloat(item.available || "0"),
+        reserved: parseFloat(item.reserved || "0"),
+        price,
+        usdtValue: balance * price,
+        vndValue: balance * price * 26000,
+      };
+    });
+  }, [balances, rates]);
+
+  const handleTransferClick = () => {
+    router.push("/balance/tranfer");
+  };
+  const handleTradeClick = () => {
+    router.push("/future");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 space-y-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <p className="mt-4 text-muted-foreground">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 space-y-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive text-lg font-semibold">{error}</p>
+          <p className="text-muted-foreground mt-2">Vui lòng thử lại sau</p>
+        </div>
+      </div>
+    );
+  }
+
+  const totalUSDT = assets.reduce((sum, a) => sum + (a.usdtValue || 0), 0);
+  const totalVND = assets.reduce((sum, a) => sum + (a.vndValue || 0), 0);
 
   const filteredAssets = assets.filter(
     (a) =>
       (!hideZero || a.balance > 0) &&
-      a.coin.toLowerCase().includes(searchTerm.toLowerCase())
+      a.coin?.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const router = useRouter();
-    const handleTransferClick = () => {
-    router.push("/balance/tranfer");
-    }
-    const handleTradeClick = () => {
-    router.push("/future");
-    }
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -81,11 +115,19 @@ export default function FutureView() {
         <div className="flex items-baseline justify-between">
           <div>
             <div className="text-sm text-gray-400">Tổng số dư</div>
-            <div className="text-4xl font-semibold mt-1">0.41 USDT</div>
-            <div className="text-gray-400 text-sm mt-1">≈ 10,884.78 VND</div>
+            <div className="text-4xl font-semibold mt-1">
+              {totalUSDT.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}{" "}
+              <span className="text-gray-400 text-xl">USDT</span>
+            </div>
+            <div className="text-gray-400 text-sm mt-1">
+              ≈ {totalVND.toLocaleString("vi-VN")} VND
+            </div>
           </div>
           <div className="text-green-400 text-sm mt-2">
-            Lời/Lỗ hôm nay +1,116.69 VND
+            Lời/Lỗ hôm nay +0.00 VND
           </div>
         </div>
       </div>

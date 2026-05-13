@@ -9,65 +9,39 @@ import SpotOrder from "./components/Order";
 import { Token } from "@/util/Token";
 import { useSpotTradingData } from "@/store/spotTradingStore";
 import Ticker from "@/components/shared/components/Ticker";
-
-const tokenList: Token[] = [
-  {
-    name: "Bitcoin",
-    symbol: "BTCUSDT",
-    icon1: "/images/coin/btc.png",
-    icon2: "/images/coin/btc.png",
-    price: "50000",
-    change: "2.5",
-    high: "50500",
-    low: "49500",
-    isActive: true,
-    volBTC: "1200",
-    volUSDT: "60000000",
-    funding: "0.01",
-    countdown: "00:00:00",
-    lastPrice: "50000",
-  },
-  {
-    name: "Ethereum",
-    symbol: "ETHUSDT",
-    icon1: "/images/coin/eth.png",
-    icon2: "/images/coin/eth.png",
-    price: "3000",
-    change: "-1.2",
-    high: "3050",
-    low: "2950",
-    isActive: false,
-    volBTC: "2400",
-    volUSDT: "7200000",
-    funding: "0.02",
-    countdown: "00:00:00",
-    lastPrice: "3000",
-  },
-  {
-    name: "Tether",
-    symbol: "USDT",
-    icon1: "/images/coin/usdt.png",
-    icon2: "/images/coin/usdt.png",
-    price: "1",
-    change: "0.0",
-    high: "1.01",
-    low: "0.99",
-    isActive: false,
-    volBTC: "0",
-    volUSDT: "100000000",
-    funding: "0.00",
-    countdown: "00:00:00",
-    lastPrice: "1",
-  },
-];
+import { useMarketTokens } from "@/hooks/useMarketTokens";
+import { useSpotTradingSync } from "@/hooks/useSpotTradingSync";
 
 export default function Spot() {
   const { setSymbol } = useSpotTradingData();
-  const [selectedToken, setSelectedToken] = useState<Token>(tokenList[0]);
+  const { tokenList, isLoading } = useMarketTokens();
+  const [selectedToken, setSelectedToken] = useState<Token | null>(null);
+
+  // Initialize WebSocket listeners for spot trading data
+  useSpotTradingSync({ enabled: true });
 
   useEffect(() => {
-    setSymbol(selectedToken.symbol.toLowerCase());
+    if (tokenList.length > 0 && !selectedToken) {
+      setSelectedToken(tokenList[0]);
+    }
+  }, [tokenList, selectedToken]);
+
+  useEffect(() => {
+    if (selectedToken) {
+      setSymbol(selectedToken.symbol.toLowerCase());
+    }
   }, [selectedToken, setSymbol]);
+
+  if (isLoading || !selectedToken) {
+    return (
+      <div className="flex items-center justify-center w-full h-screen">
+        <div className="relative w-16 h-16">
+          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-500 border-r-blue-500 animate-spin"></div>
+          <div className="absolute inset-2 rounded-full border-4 border-transparent border-b-purple-500 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }}></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="">

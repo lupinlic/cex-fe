@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { axiosInstance } from '@/lib/axios';
 
 export interface DepositHistoryItem {
   id: string;
@@ -13,58 +14,25 @@ export interface DepositHistoryItem {
   status: "confirmed" | "pending" | "failed";
 }
 
-const fakeDepositHistory: DepositHistoryItem[] = [
-  {
-    id: "dh-1",
-    amount: "0.035",
-    token: { asset: "BTC" },
-    excuAddress: "bc1qfakeaddress1234567890",
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    status: "confirmed",
-  },
-  {
-    id: "dh-2",
-    amount: "12.5",
-    token: { asset: "USDT" },
-    excuAddress: "0xFAKEUSDTADDRESS12345",
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    status: "pending",
-  },
-  {
-    id: "dh-3",
-    amount: "1.82",
-    token: { asset: "ETH" },
-    excuAddress: "0xFAKEETHADDRESS67890",
-    createdAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-    status: "failed",
-  },
-];
-
 export function useGetDepositHistory() {
   const [data, setData] = useState<DepositHistoryItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const timerRef = useRef<number | null>(null);
 
-  const loadHistory = useCallback(() => {
-    if (timerRef.current) {
-      window.clearTimeout(timerRef.current);
-    }
-
-    setIsLoading(true);
-    timerRef.current = window.setTimeout(() => {
-      setData([...fakeDepositHistory]);
+  const loadHistory = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await axiosInstance.get<DepositHistoryItem[]>('/transactions/deposits');
+      setData(response.data);
+    } catch (error) {
+      console.error('Failed to load deposit history', error);
+      setData([]);
+    } finally {
       setIsLoading(false);
-      timerRef.current = null;
-    }, 150);
+    }
   }, []);
 
   useEffect(() => {
     loadHistory();
-    return () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-      }
-    };
   }, [loadHistory]);
 
   return { data, isLoading, refetch: loadHistory };
@@ -121,64 +89,28 @@ export interface WithdrawHistoryItem {
   excuAddress: string;
   txHash: string;
   createdAt: string;
-  status: "confirmed" | "pending" | "failed";
+  status: "confirmed" | "pending" | "failed" | "broadcasted";
 }
-
-const fakeWithdrawHistory: WithdrawHistoryItem[] = [
-  {
-    id: "wh-1",
-    amount: "0.120",
-    token: { asset: "ETH" },
-    excuAddress: "0xWITHDRAWADDRESS12345",
-    txHash: "0xTXHASHFAKE123",
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    status: "confirmed",
-  },
-  {
-    id: "wh-2",
-    amount: "100",
-    token: { asset: "USDT" },
-    excuAddress: "0xUSDTWITHDRAW67890",
-    txHash: "0xTXHASHFAKE456",
-    createdAt: new Date(Date.now() - 1000 * 60 * 20).toISOString(),
-    status: "pending",
-  },
-  {
-    id: "wh-3",
-    amount: "0.005",
-    token: { asset: "BTC" },
-    excuAddress: "bc1qwithdrawfake0000",
-    txHash: "0xTXHASHFAKE789",
-    createdAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
-    status: "failed",
-  },
-];
 
 export function useGetWithdrawHistory() {
   const [data, setData] = useState<WithdrawHistoryItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const timerRef = useRef<number | null>(null);
 
-  const loadHistory = useCallback(() => {
-    if (timerRef.current) {
-      window.clearTimeout(timerRef.current);
-    }
-
-    setIsLoading(true);
-    timerRef.current = window.setTimeout(() => {
-      setData([...fakeWithdrawHistory]);
+  const loadHistory = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const response = await axiosInstance.get<WithdrawHistoryItem[]>('/transactions/withdrawals');
+      setData(response.data);
+    } catch (error) {
+      console.error('Failed to load withdraw history', error);
+      setData([]);
+    } finally {
       setIsLoading(false);
-      timerRef.current = null;
-    }, 150);
+    }
   }, []);
 
   useEffect(() => {
     loadHistory();
-    return () => {
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-      }
-    };
   }, [loadHistory]);
 
   return { data, isLoading, refetch: loadHistory };
@@ -191,13 +123,50 @@ interface WithdrawParams {
   amount: string;
 }
 
+export interface WithdrawFeeParams {
+  network_id: string;
+  token_id: string;
+  to_address: string;
+  amount: string;
+}
+
+export interface WithdrawFeeResponse {
+  gasPrice: string;
+  gasLimit: string;
+  fee: string;
+}
+
+export function useCalculateWithdrawFee() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [feeData, setFeeData] = useState<WithdrawFeeResponse | null>(null);
+
+  const calculateFee = useCallback(async (params: WithdrawFeeParams) => {
+    try {
+      setIsLoading(true);
+      const response = await axiosInstance.post<WithdrawFeeResponse>('/withdraw/caculaterFee', params);
+      setFeeData(response.data);
+      return response.data;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  return { calculateFee, feeData, isLoading };
+}
+
 export function useWithDraw() {
   return useCallback((params: WithdrawParams) => {
-    return new Promise<{ status: "confirmed" | "pending" | "failed"; txHash: string }>((resolve) => {
-      window.setTimeout(() => {
-        const hash = `0x${Math.random().toString(16).slice(2, 10).toUpperCase()}`;
-        resolve({ status: "confirmed", txHash: hash });
-      }, 400);
-    });
+    return axiosInstance
+      .post<{
+        withdrawalId: string;
+        txHash: string;
+        amount: string;
+        fee: string;
+        tokenId: string;
+        networkId: string;
+        status: 'pending' | 'broadcasted' | 'confirmed' | 'failed';
+        type: string;
+      }>('/withdraw', params)
+      .then((res) => res.data);
   }, []);
 }

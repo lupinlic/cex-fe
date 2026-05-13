@@ -7,6 +7,7 @@ import { useSpotTradingData } from "@/store/spotTradingStore";
 import { useBalanceStore } from "@/store/balanceStore";
 import toast, { Toaster } from "react-hot-toast";
 import Decimal from "decimal.js";
+import { usePlaceOrder } from "@/hooks/useOrder";
 
 interface SpotOrderFormProps {
   tokenList: Token[];
@@ -31,6 +32,8 @@ export default function Trading({
 }: SpotOrderFormProps) {
   const { ticker, symbol } = useSpotTradingData();
   const { balances, refreshBalances } = useBalanceStore();
+  const placeOrderMutation = usePlaceOrder();
+  const isPlacingOrder = placeOrderMutation.isPending;
 
   const [orderType, setOrderType] = useState<"BUY" | "SELL">("BUY");
   const [priceType, setPriceType] = useState<"MARKET" | "LIMIT">("MARKET");
@@ -153,7 +156,7 @@ export default function Trading({
         quote_quantity: usdtAmount,
         client_order_id: Date.now().toString(),
       };
-      console.log("Fake placing spot order:", orderPayload);
+      await placeOrderMutation.mutateAsync(orderPayload);
       toast.success("Order placed successfully!");
       refreshBalances();
     } catch (error: any) {
@@ -325,11 +328,12 @@ export default function Trading({
         {/* --- Submit Button --- */}
         <div className="relative w-full inline-block">
           <button
-            className="mt-4 px-6 py-2 rounded-lg font-medium text-black w-full cursor-pointer"
+            className="mt-4 px-6 py-2 rounded-lg font-medium text-black w-full cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             style={buttonStyle}
             onClick={handleSubmit}
+            disabled={isPlacingOrder}
           >
-            {orderType==="BUY" ? "Mua" : "Bán"} {selectedToken?.symbol.toUpperCase().slice(0, -4)}
+            {isPlacingOrder ? "Đang đặt lệnh..." : `${orderType==="BUY" ? "Mua" : "Bán"} ${selectedToken?.symbol.toUpperCase().slice(0, -4)}`}
           </button>
         </div>
 

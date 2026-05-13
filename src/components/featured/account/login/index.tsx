@@ -3,13 +3,113 @@
 import { Input } from "@/components/shared/ui/input";
 import { Button } from "@/components/shared/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/shared/ui/tabs";
-import { ChevronDown, KeyRound, Apple, Send } from "lucide-react";
+import { ChevronDown, KeyRound, Apple, Send, QrCode, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { useLogin } from "@/hooks/useLogin";
 
 export default function LoginPage() {
+  const {
+    formData,
+    showPassword,
+    activeTab,
+    isLoading,
+    error,
+    setFormData,
+    setShowPassword,
+    setActiveTab,
+    handleLogin,
+    resetError,
+  } = useLogin();
+
+  const renderInputSection = () => {
+    switch (activeTab) {
+      case "phone":
+        return (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="flex gap-2">
+              <div className="flex items-center gap-1 border border-border rounded-md px-3 bg-muted">
+                +84 <ChevronDown className="w-4 h-4" />
+              </div>
+              <Input
+                placeholder="Số điện thoại"
+                className="py-5"
+                value={formData.email}
+                onChange={(e) => setFormData({ email: e.target.value })}
+              />
+            </div>
+
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Mật khẩu"
+                className="py-5 pr-10"
+                value={formData.password}
+                onChange={(e) => setFormData({ password: e.target.value })}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </form>
+        );
+
+      case "email":
+        return (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <Input
+              type="email"
+              placeholder="Địa chỉ email"
+              className="py-5"
+              value={formData.email}
+              onChange={(e) => setFormData({ email: e.target.value })}
+            />
+
+            <div className="relative">
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Mật khẩu"
+                className="py-5 pr-10"
+                value={formData.password}
+                onChange={(e) => setFormData({ password: e.target.value })}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </form>
+        );
+
+      case "qr":
+        return (
+          <div className="mb-4">
+            <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+              <QrCode className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-2">
+                Quét mã QR để đăng nhập
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Mở ứng dụng CEX trên điện thoại để quét mã
+              </p>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="grid grid-cols-2 min-h-screen">
-      
+
       {/* LEFT */}
       <div className="bg-background text-foreground flex flex-col justify-center items-center p-10">
         <h1 className="text-4xl font-bold mb-4">
@@ -35,13 +135,13 @@ export default function LoginPage() {
       {/* RIGHT */}
       <div className="flex items-center justify-center bg-background">
         <div className="w-[400px]">
-          
+
           <h2 className="text-3xl font-bold mb-6 text-center">
             Đăng nhập
           </h2>
 
           {/* Tabs */}
-          <Tabs defaultValue="phone" className="mb-4 p-1">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "phone" | "email" | "qr")} className="mb-4 p-1">
             <TabsList className="grid grid-cols-3">
               <TabsTrigger value="phone" className="p-1">Điện thoại</TabsTrigger>
               <TabsTrigger value="email" className="p-1">Email</TabsTrigger>
@@ -49,19 +149,24 @@ export default function LoginPage() {
             </TabsList>
           </Tabs>
 
-          {/* Input */}
-          <div className="flex gap-2 mb-4">
-            <div className="flex items-center gap-1 border border-border rounded-md px-3 bg-muted">
-              +84 <ChevronDown className="w-4 h-4" />
-            </div>
-
-            <Input placeholder="Số điện thoại" className="py-5" />
-          </div>
+          {/* Dynamic Input Section */}
+          {renderInputSection()}
 
           {/* Button */}
-          <Button className="w-full rounded-full mb-4 py-5 cursor-pointer hover:bg-primary/90 transition">
-            Tiếp theo
+          <Button
+            className="w-full rounded-full mt-4 mb-4 py-5 cursor-pointer hover:bg-primary/90 transition"
+            onClick={handleLogin}
+            disabled={isLoading || activeTab === "qr"}
+          >
+            {isLoading ? "Đang đăng nhập..." : "Đăng nhập"}
           </Button>
+
+          {/* Error Message */}
+          {error && (
+            <p className="text-sm text-red-500 text-center mb-4">
+              {error}
+            </p>
+          )}
 
           {/* Register */}
           <p className="text-sm text-center mb-6 text-muted-foreground">
@@ -84,7 +189,7 @@ export default function LoginPage() {
 
           {/* Social */}
           <div className="flex flex-col gap-3">
-            
+
             <Button
               variant="outline"
               className="rounded-full flex items-center justify-center gap-2 hover:bg-muted transition py-5"

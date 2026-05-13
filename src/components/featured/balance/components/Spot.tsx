@@ -15,11 +15,8 @@ export default function SpotView() {
   const [hideZero, setHideZero] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const router = useRouter();
-  const { balances, rates } = useBalanceStore();
+  const { balances, rates, isLoading, error } = useBalanceStore();
 
-  const handleTransferClick = () => {
-    router.push("/balance/tranfer");
-  };
   const assets = useMemo(() => {
     if (!balances?.spot) return [];
 
@@ -31,7 +28,7 @@ export default function SpotView() {
 
       return {
         coin,
-        icon: `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${coin.toLowerCase()}.png`,
+        icon: `https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/${coin.toLowerCase()}.png`|| "/logo.png",
         balance,
         available: parseFloat(item.available || "0"),
         locked: parseFloat(item.locked || "0"),
@@ -43,6 +40,32 @@ export default function SpotView() {
       };
     });
   }, [balances, rates]);
+
+  const handleTransferClick = () => {
+    router.push("/balance/tranfer");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 space-y-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <p className="mt-4 text-muted-foreground">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 space-y-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive text-lg font-semibold">{error}</p>
+          <p className="text-muted-foreground mt-2">Vui lòng thử lại sau</p>
+        </div>
+      </div>
+    );
+  }
 
   // 🔹 Tổng USDT và VND
   const totalUSDT = assets.reduce((sum, a) => sum + (a.usdtValue || 0), 0);

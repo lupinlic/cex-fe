@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Input } from "@/components/shared/ui/input";
 import { Button } from "@/components/shared/ui/button";
 import {
@@ -34,15 +35,53 @@ import {
 import { ThemeToggle } from "./theme-toggle";
 import { HoverDropdown } from "./hover-dropdown";
 import { HoverCard } from "./hover-card";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { title } from "process";
+import toast from "react-hot-toast";
 
 export function Header() {
-  const { isLoggedIn } = useAuth();
-  const email = "huatunglam1205@domain.com";
+  const { isLoggedIn, user } = useAuth();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const email = user?.email || "huatunglam1205@domain.com";
 
-const maskedEmail =
-  email.slice(0, 3) + "***@" + email.split("@")[1];
+  const maskedEmail =
+    email.slice(0, 3) + "***@" + email.split("@")[1];
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+
+    try {
+      // Clear all authentication data
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+
+      // Clear any other auth-related data that might exist
+      const keysToRemove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.includes("auth") || key.includes("token") || key.includes("user"))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+
+      // Dispatch custom event to notify auth state change
+      window.dispatchEvent(new CustomEvent('auth-changed'));
+
+      // Show success message
+      toast.success("Đăng xuất thành công");
+
+      // Redirect to login page
+      router.push("/account/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Có lỗi xảy ra khi đăng xuất");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
   return (
     <header className="w-full border-b border-border bg-background fixed top-0 left-0 z-50">
       <div className="flex items-center justify-between px-6 h-16">
@@ -202,7 +241,7 @@ const maskedEmail =
 
           {/* Auth */}
           <div className="hidden md:flex items-center gap-2">
-            {isLoggedIn ? (
+            {!isLoggedIn ? (
               <>
                 <Link href="/account/login">
                   <Button
@@ -285,7 +324,7 @@ const maskedEmail =
                         <p className="text-[12px] text-background">{maskedEmail}</p>
                         <p className="text-[11px] text-muted-foreground">
                           <span>UID:</span>
-                          <span className="font-mono ml-1">123456789</span>
+                          <span className="font-mono ml-1">{user?.id?.slice(-8) || "123456789"}</span>
                         </p>
                       </div>
                     </div>
@@ -311,9 +350,9 @@ const maskedEmail =
                         },
                         {
                           icon: <LogOut className="w-5 h-5" />,
-                          title: "Đăng xuất",
+                          title: isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất",
                           description: "",
-                          link: "/transfer"
+                          onClick: isLoggingOut ? undefined : handleLogout
                         },
                       ]}
                     />

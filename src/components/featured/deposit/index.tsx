@@ -1,41 +1,54 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import CustomSelect from "@/components/shared/components/CustomSelect";
 import { CheckCheck, Copy, Check } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { useGetTokens, useGetNetworks } from "@/api/tokenApi";
-import { useGetDepositHistory, useDeposit } from "@/api/balanceApi";
+import { useAuth } from "@/hooks/use-auth";
+import { balanceApi, DepositHistoryItem } from "@/services/balanceApi";
 import { useTradingDataStore } from "@/store/tradingdataStore";
 
 export default function DepositView() {
   const [coin, setCoin] = useState("");
   const [coinId, setCoinId] = useState("");
   const [network, setNetwork] = useState("");
-  const [userId, setUserId] = useState("");
   const [isCopied, setIsCopied] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [walletAddress, setWalletAddress] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositHistory, setDepositHistory] = useState<DepositHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const latestBlock = useTradingDataStore((state) => state.latestBlock);
-  const { data: DepositHistory, refetch: refreshHistory } = useGetDepositHistory();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    setUserId(localStorage.getItem("user_id") || "");
+  const fetchDepositHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const history = await balanceApi.getDepositHistory();
+      setDepositHistory(history);
+    } catch (error) {
+      console.error("Failed to load deposit history:", error);
+      setDepositHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
   }, []);
 
   const { data: tokenList } = useGetTokens();
 
   const coinOptions = useMemo(
-    () => tokenList?.map((t) => t.name) ?? [],
+    () => tokenList?.map((t) => t.asset) ?? [],
     [tokenList]
   );
 
   useEffect(() => {
-    const token = tokenList?.find((t) => t.name === coin);
+    const token = tokenList?.find((t) => t.asset === coin);
     setCoinId(token?.id ?? "");
     setNetwork("");
   }, [coin, tokenList]);
 
-  const { data: networkList } = useGetNetworks(coinId.toString());
+  const { data: networkList } = useGetNetworks(coinId);
 
   const networkOptions = useMemo(
     () => networkList?.map((n) => n.network.name) ?? [],
@@ -45,22 +58,42 @@ export default function DepositView() {
   const selectedNetwork = networkList?.find((n) => n.network.name === network);
   const evmName = selectedNetwork?.network?.vmSystem?.name || "";
 
-  const {
-    data: depositRes,
-    refetch: createAddress,
-    loading: depositLoading,
-  } = useDeposit({ user_id: userId, vm_name: evmName });
+  const createDepositAddress = useCallback(async () => {
+    if (!user?.id || !coin || !network || !evmName) {
+      setWalletAddress("");
+      return;
+    }
+
+    setDepositLoading(true);
+    try {
+      const response = await balanceApi.getDepositAddress({
+        user_id: user.id,
+        vm_name: evmName,
+      });
+      setWalletAddress(response.address);
+    } catch (error) {
+      console.error("Failed to create deposit address:", error);
+      const prefix = evmName.slice(0, 3).toUpperCase();
+      const suffix = user.id.slice(-4) || "0000";
+      setWalletAddress(`${prefix}-${suffix}-${Math.random().toString(16).slice(2, 10).toUpperCase()}`);
+    } finally {
+      setDepositLoading(false);
+    }
+  }, [user?.id, coin, network, evmName]);
 
   useEffect(() => {
-    if (!network || !coin) return;
-    createAddress();
-  }, [network]);
+    if (!network || !coin || !user?.id) return;
+    createDepositAddress();
+  }, [network, coin, user?.id, createDepositAddress]);
 
   useEffect(() => {
-    refreshHistory();
-  }, [latestBlock]);
+    fetchDepositHistory();
+  }, [fetchDepositHistory]);
 
-  const walletAddress = depositRes?.address || "";
+  useEffect(() => {
+    if (!depositHistory.length) return;
+    fetchDepositHistory();
+  }, [latestBlock, fetchDepositHistory]);
 
   useEffect(() => {
     if (!coin) setCurrentStep(1);
@@ -140,7 +173,7 @@ export default function DepositView() {
 
               <div className="flex-1">
                 <p className="text-xs text-gray-400">Địa chỉ</p>
-                <p className="text-sm font-mono break-words mb-2">
+                <p className="text-sm font-mono break-all whitespace-normal mb-2">
                   {walletAddress}
                 </p>
 
@@ -186,15 +219,19 @@ export default function DepositView() {
 
         <div className="pt-8 border-t border-gray-800">
           <h3 className="font-semibold mb-4 text-sm">
-            Giao dịch rút tiền gần đây
+            Lịch sử nạp tiền gần đây
           </h3>
           <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto">
-            {DepositHistory?.length === 0 ? (
+            {historyLoading ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
+                Đang tải lịch sử nạp tiền...
+              </div>
+            ) : depositHistory?.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
-                📄 Không có lịch sử rút tiền gần đây
+                📄 Không có lịch sử nạp tiền gần đây
               </div>
             ) : (
-              DepositHistory?.map((tx) => (
+              depositHistory?.map((tx) => (
                 <div
                   key={tx.id}
                   className="flex justify-between items-center bg-gray-800/50 rounded px-3 py-2 hover:bg-gray-700/70 transition-all text-xs"

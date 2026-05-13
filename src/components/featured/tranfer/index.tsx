@@ -92,7 +92,7 @@ export default function TransferView() {
     await transfer({
       fromWalletType: fromAccount.toUpperCase() as "SPOT" | "FUNDING" | "FUTURES",
       toWalletType: toAccount.toUpperCase() as "SPOT" | "FUNDING" | "FUTURES",
-      amount: Number(amount),
+      amount: amount,
       assetToken: selectedCoin,
     });
     toast.success("Chuyển thành công");

@@ -1,24 +1,35 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import TableSection from "@/components/shared/components/TableSection";
 import { useSpotTradingData } from "@/store/spotTradingStore";
+import { useBalances, useCloseOrder, useLedger, useOrderHistory, useOrderSnapshot, OrderHistoryItem } from "@/hooks/useOrder";
+import { useMarketTokens } from "@/hooks/useMarketTokens";
 import { RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 
-// Fake data types
-interface FakeBalance {
-  id: string;
+interface BalanceApiItem {
   balance: {
-    token: { asset: string };
+    id: string;
+    createdAt: string;
+    updatedAt: string;
     available: string;
     locked: string;
     avgPrice: string;
+    costPrice: string;
+    token: {
+      id: string;
+      createdAt: string;
+      updatedAt: string;
+      asset: string;
+      name: string;
+      is_native: boolean;
+    };
   };
-  pnl: number;
+  pnl: string;
 }
 
-interface FakeOpenOrder {
+interface OrderSnapshotItem {
   id: string;
   side: "BUY" | "SELL";
   price: string;
@@ -27,126 +38,12 @@ interface FakeOpenOrder {
   quote_quantity: string;
 }
 
-interface FakeOrder {
-  createdAt: string;
-  side: "BUY" | "SELL";
-  price: string;
-  quantity: string;
-  filled_quantity: string;
-  filled_quote_quantity: string;
-  status: string;
-}
-
-interface FakeLedger {
+interface LedgerItem {
   createdAt: string;
   reason: string;
-  token: { asset: string };
+  token?: { asset: string };
   delta: number;
 }
-
-// Fake data generators
-const fakeAssets: FakeBalance[] = [
-  {
-    id: "1",
-    balance: {
-      token: { asset: "BTC" },
-      available: "0.5",
-      locked: "0.1",
-      avgPrice: "45000",
-    },
-    pnl: 8.5,
-  },
-  {
-    id: "2",
-    balance: {
-      token: { asset: "ETH" },
-      available: "2.0",
-      locked: "0.5",
-      avgPrice: "2500",
-    },
-    pnl: 5.2,
-  },
-  {
-    id: "3",
-    balance: {
-      token: { asset: "USDT" },
-      available: "5000",
-      locked: "1000",
-      avgPrice: "1",
-    },
-    pnl: 0,
-  },
-];
-
-const fakeOpenOrders: FakeOpenOrder[] = [
-  {
-    id: "ord1",
-    side: "BUY",
-    price: "48000",
-    quantity: "0.5",
-    filled_quote_quantity: "12000",
-    quote_quantity: "24000",
-  },
-  {
-    id: "ord2",
-    side: "SELL",
-    price: "3200",
-    quantity: "1.0",
-    filled_quote_quantity: "1600",
-    quote_quantity: "3200",
-  },
-];
-
-const fakeOrderHistory: FakeOrder[] = [
-  {
-    createdAt: new Date(Date.now() - 3600000).toISOString(),
-    side: "BUY",
-    price: "47500",
-    quantity: "1.0",
-    filled_quantity: "1.0",
-    filled_quote_quantity: "47500",
-    status: "FILLED",
-  },
-  {
-    createdAt: new Date(Date.now() - 7200000).toISOString(),
-    side: "SELL",
-    price: "3100",
-    quantity: "2.0",
-    filled_quantity: "2.0",
-    filled_quote_quantity: "6200",
-    status: "FILLED",
-  },
-  {
-    createdAt: new Date(Date.now() - 10800000).toISOString(),
-    side: "BUY",
-    price: "2800",
-    quantity: "5.0",
-    filled_quantity: "3.0",
-    filled_quote_quantity: "8400",
-    status: "PARTIALLY_FILLED",
-  },
-];
-
-const fakeLedger: FakeLedger[] = [
-  {
-    createdAt: new Date(Date.now() - 1800000).toISOString(),
-    reason: "Trade",
-    token: { asset: "BTC" },
-    delta: 0.5,
-  },
-  {
-    createdAt: new Date(Date.now() - 5400000).toISOString(),
-    reason: "Deposit",
-    token: { asset: "USDT" },
-    delta: 5000,
-  },
-  {
-    createdAt: new Date(Date.now() - 9000000).toISOString(),
-    reason: "Trade",
-    token: { asset: "ETH" },
-    delta: 2.0,
-  },
-];
 
 type PortfolioTab =
   | "asset"
@@ -170,7 +67,7 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
   const [assetRows, setAssetRows] = useState<
     (React.ReactNode | string | number)[][]
   >([]);
-  const [ledgerData, setLedgerData] = useState<
+  const [ledgerRows, setLedgerRows] = useState<
     (React.ReactNode | string | number)[][]
   >([]);
   const [orderHistoryRows, setOrderHistoryRows] = useState<
@@ -181,20 +78,53 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
   >([]);
 
   const { ticker, symbol } = useSpotTradingData();
+  const { marketTokens } = useMarketTokens();
+  const { data: balancesData, refetch: refetchBalances } = useBalances();
 
-  // Use fake data instead of API calls
-  const assetResponse = fakeAssets;
-  const openOrderResponse = fakeOpenOrders;
-  const orderHistoryResponse = fakeOrderHistory;
-  const ledgerResponse = fakeLedger;
+  const selectedTokenFromList = marketTokens.find(
+    (token) => token.symbol.toLowerCase() === symbol?.toLowerCase()
+  );
+  const marketTokenId = selectedTokenFromList?.id;
 
-  const handleRefresh = () => {
-    toast.success("Dữ liệu đã được làm mới!");
+  const { data: orderSnapshotData, refetch: refetchOrderSnapshot } = useOrderSnapshot(marketTokenId);
+  const { data: orderHistoryData, refetch: refetchOrderHistory } = useOrderHistory(marketTokenId);
+  const { data: ledgerApiData, refetch: refetchLedger } = useLedger(symbol);
+  const { mutateAsync: closeOrder } = useCloseOrder();
+
+  const assetResponse = balancesData as BalanceApiItem[] | undefined;
+  const openOrderResponse = orderSnapshotData as OrderSnapshotItem[] | undefined;
+  const orderHistoryResponse = orderHistoryData as OrderHistoryItem[] | undefined;
+  const ledgerResponse = ledgerApiData as LedgerItem[] | undefined;
+
+  const handleRefresh = async () => {
+    try {
+      await Promise.all([
+        refetchBalances?.(),
+        refetchOrderSnapshot?.(),
+        refetchOrderHistory?.(),
+        refetchLedger?.(),
+      ]);
+      toast.success("Dữ liệu đã được làm mới!");
+    } catch (error) {
+      toast.error("Làm mới dữ liệu thất bại.");
+    }
   };
 
   const handleCancelOrder = async (orderId: string) => {
+    if (!marketTokenId) {
+      toast.error("Không tìm thấy marketToken_id để hủy lệnh.");
+      return;
+    }
+
     try {
-      toast.success("Đã gửi yêu cầu hủy lệnh!");
+      await closeOrder({ order_id: orderId, marketToken_id: marketTokenId });
+      toast.success("Lệnh đã được hủy thành công!");
+      await Promise.all([
+        refetchBalances?.(),
+        refetchOrderSnapshot?.(),
+        refetchOrderHistory?.(),
+        refetchLedger?.(),
+      ]);
     } catch (error) {
       toast.error("Hủy lệnh thất bại!");
     }
@@ -202,8 +132,9 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
 
   // === MAP BALANCE API TO TABLE ROWS ===
   useEffect(() => {
-    if (assetResponse && Array.isArray(assetResponse)) {
-      const rows: (React.ReactNode | string | number)[][] = assetResponse.map(
+    if (!assetResponse || !Array.isArray(assetResponse)) return;
+
+    const rows: (React.ReactNode | string | number)[][] = assetResponse.map(
         ({ balance, pnl }) => {
           const amount =
             parseFloat(balance.available) + parseFloat(balance.locked);
@@ -212,6 +143,7 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
             ? parseFloat(ticker.lastPrice)
             : 50000;
           const value = amount * price;
+          const pnlValue = parseFloat(pnl ?? "0");
 
           const plPercent =
             avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
@@ -222,78 +154,80 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
             amount.toFixed(4),
             parseFloat(balance.available).toFixed(4),
             parseFloat(balance.locked).toFixed(4),
-            avgPrice,
+            avgPrice.toFixed(2),
             price.toFixed(2),
             value.toFixed(2),
             <span
               key={balance.token.asset + "-pl"}
               className={plColor}
-              title={`P/L: ${pnl ?? 0}%`}
+              title={`P/L: ${pnlValue.toFixed(2)}%`}
             >
-              {pnl?.toFixed(2) ?? 0}%
+              {pnlValue.toFixed(2)}%
             </span>,
             "",
           ];
         },
       );
       setAssetRows(rows);
-    }
   }, [assetResponse, ticker]);
   //  === MAP OPEN ORDER  API TO TABLE ROWS ===
   useEffect(() => {
-    if (openOrderResponse && Array.isArray(openOrderResponse)) {
-      const rows = openOrderResponse.map((order: FakeOpenOrder) => {
-        const filled =
-          Number(order.filled_quote_quantity) / Number(order.quote_quantity);
-        return [
-          symbol || "BTCUSDT",
-          order.side,
-          parseFloat(order.price).toFixed(2),
-          parseFloat(order.quantity).toFixed(4),
-          (filled * 100).toFixed(2) + "%",
-          parseFloat(order.filled_quote_quantity).toFixed(2),
-          <button
-            key={`cancel-${order.id}`}
-            className="px-2 py-1 text-red-500 hover:underline cursor-pointer"
-            onClick={() => handleCancelOrder(order.id)}
-            type="button"
-          >
-            Hủy lệnh
-          </button>,
-        ];
-      });
-      setOpenOrderRows(rows);
-    }
-  }, [openOrderResponse, symbol]);
+    if (!openOrderResponse || !Array.isArray(openOrderResponse)) return;
 
-  // === MAP ORDER HISTORY API TO TABLE ROWS ===
-  useEffect(() => {
-    if (orderHistoryResponse && Array.isArray(orderHistoryResponse)) {
-      const rows = orderHistoryResponse.map((order: FakeOrder) => [
-        new Date(order.createdAt).toLocaleString(),
+    const rows = openOrderResponse.map((order: OrderSnapshotItem) => {
+      const filled =
+        Number(order.filled_quote_quantity) / Number(order.quote_quantity);
+      return [
         symbol || "BTCUSDT",
         order.side,
         parseFloat(order.price).toFixed(2),
         parseFloat(order.quantity).toFixed(4),
-        parseFloat(order.filled_quantity).toFixed(4),
+        (filled * 100).toFixed(2) + "%",
         parseFloat(order.filled_quote_quantity).toFixed(2),
-        order.status,
-      ]);
-      setOrderHistoryRows(rows);
-    }
+        <button
+          key={`cancel-${order.id}`}
+          className="px-2 py-1 text-red-500 hover:underline cursor-pointer"
+          onClick={() => handleCancelOrder(order.id)}
+          type="button"
+        >
+          Hủy lệnh
+        </button>,
+      ];
+    });
+
+    setOpenOrderRows(rows);
+  }, [openOrderResponse, symbol]);
+
+  // === MAP ORDER HISTORY API TO TABLE ROWS ===
+  useEffect(() => {
+    if (!orderHistoryResponse || !Array.isArray(orderHistoryResponse)) return;
+
+    const rows = orderHistoryResponse.map((order: OrderHistoryItem) => [
+      new Date(order.createdAt).toLocaleString(),
+      symbol || "BTCUSDT",
+      order.side,
+      parseFloat(order.price).toFixed(2),
+      parseFloat(order.quantity).toFixed(4),
+      parseFloat(order.filled_quantity ?? "0").toFixed(4),
+      parseFloat(order.filled_quote_quantity ?? "0").toFixed(2),
+      order.status,
+    ]);
+
+    setOrderHistoryRows(rows);
   }, [orderHistoryResponse, symbol]);
 
   // === MAP LEDGER API TO TABLE ROWS ===
   useEffect(() => {
-    if (ledgerResponse && Array.isArray(ledgerResponse)) {
-      const rows = ledgerResponse.map((item: FakeLedger) => [
-        new Date(item.createdAt).toLocaleString(),
-        item.reason,
-        item.token?.asset,
-        item.delta.toFixed(4),
-      ]);
-      setLedgerData(rows);
-    }
+    if (!ledgerResponse || !Array.isArray(ledgerResponse)) return;
+
+    const rows = ledgerResponse.map((item: any) => [
+      new Date(item.createdAt).toLocaleString(),
+      item.reason,
+      item.token?.asset,
+      item.delta?.toFixed?.(4) ?? "0",
+    ]);
+
+    setLedgerRows(rows);
   }, [ledgerResponse]);
 
   const headersMap: Record<PortfolioTab, string[]> = {
@@ -335,11 +269,11 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
       asset: assetRows,
       openorder: openOrderRows || [],
       orderhistory: orderHistoryRows || [],
-      balancefluctuations: ledgerData || [],
+      balancefluctuations: ledgerRows || [],
     };
 
   return (
-    <div className="h-[300px] w-full overflow-y-auto pt-3 border-t-3 border-border">
+    <div className="h-75 w-full overflow-y-auto pt-3 border-t-3 border-border">
       <div className="flex items-center justify-between px-5 mb-4">
         <div className="flex gap-x-5">
           {(Object.keys(headersMap) as PortfolioTab[]).map((key) => (
@@ -382,14 +316,14 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
               Ẩn lệnh đã hủy
             </span>
           </label>
-          <p className="text-[#fff] text-[12px]">USD / Tiền tệ</p>
+          <p className="text-white text-[12px]">USD / Tiền tệ</p>
         </div>
       </div>
 
-      <div className="h-[220px] overflow-auto px-5">
+      <div className="h-55 overflow-auto px-5">
         {tab === "asset" ? (
           <div className="flex flex-col gap-4">
-            {assetResponse.map((asset) => {
+            {(assetResponse ?? []).map((asset) => {
               const available = parseFloat(asset.balance.available);
               const reserved = parseFloat(asset.balance.locked);
               const total = available + reserved;
@@ -399,11 +333,13 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
                 : 0;
               const value = total * price;
               const breakeven = avgPrice > 0 ? avgPrice.toFixed(2) : "-";
-              const plPercent =
-                avgPrice > 0 ? ((price - avgPrice) / avgPrice) * 100 : 0;
+              const pnlValue = parseFloat(asset.pnl ?? "0");
 
               return (
-                <div key={asset.id} className="border border-border rounded-xl p-4">
+                <div
+                  key={asset.balance.id}
+                  className="border border-border rounded-xl p-4"
+                >
                   {/* Header */}
                   <div className="flex items-center gap-2 mb-4">
                     <img
@@ -465,11 +401,11 @@ export default function SpotOrder({ data = {} }: SpotOrderProps) {
                         <p className="text-gray-500 text-[12px]">Total ROI</p>
                         <p
                           className={`font-medium text-[12px] ${
-                            asset.pnl >= 0 ? "text-green-400" : "text-red-400"
+                            pnlValue >= 0 ? "text-green-400" : "text-red-400"
                           }`}
                         >
-                          {asset.pnl >= 0 ? "+" : ""}
-                          {asset.pnl?.toFixed(2) ?? "--"}%
+                          {pnlValue >= 0 ? "+" : ""}
+                          {pnlValue.toFixed(2)}%
                         </p>
                       </div>
                     </div>

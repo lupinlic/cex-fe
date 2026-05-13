@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { Time } from "lightweight-charts";
+import { wsService } from "@/services/websocket";
+import toast from "react-hot-toast";
 
 interface CandleData {
   time: Time;
@@ -43,8 +45,8 @@ interface SummaryData {
 }
 
 interface SpotTradingDataState {
-  latestBlock: number;
-  setLatestBlock: (value: number) => void;
+  latestBlock: any[];
+  setLatestBlock: (value: any[]) => void;
   candles: CandleData[];
   setCandles: (data: CandleData[]) => void;
   interval: "1m" | "5m" | "15m" | "1h" | "4h" | "1d";
@@ -55,6 +57,8 @@ interface SpotTradingDataState {
   setSymbol: (sym: string) => void;
   ticker: TickerData | null;
   setTicker: (data: TickerData | null) => void;
+  fundingRate: { funding: string; countdown: string } | null;
+  setFundingRate: (data: { funding: string; countdown: string } | null) => void;
   tickerChange: TickerChangeData[];
   setTickerChange: (data: TickerChangeData[]) => void;
   orderbook: OrderBookData | null;
@@ -63,60 +67,59 @@ interface SpotTradingDataState {
   setSummary: (data: SummaryData | null) => void;
 }
 
+const parseCandle = (k: Record<string, any>): CandleData => ({
+  time: Math.floor(Number(k.start_time ?? k.startTime) / 1000) as Time,
+  open: parseFloat(k.o ?? k.open ?? "0"),
+  high: parseFloat(k.h ?? k.high ?? "0"),
+  low: parseFloat(k.l ?? k.low ?? "0"),
+  close: parseFloat(k.c ?? k.close ?? "0"),
+});
+
+const parseVolume = (k: Record<string, any>): VolumeData => ({
+  time: Math.floor(Number(k.start_time ?? k.startTime) / 1000) as Time,
+  value: parseFloat(k.volume ?? k.v ?? "0"),
+  color:
+    parseFloat(k.c ?? k.close ?? "0") >=
+    parseFloat(k.o ?? k.open ?? "0")
+      ? "#26a69a"
+      : "#ef5350",
+});
+
+const parseTicker = (payload: Record<string, any>): TickerData => ({
+  lastPrice: String(payload.lastPrice ?? payload.c ?? payload.price ?? "0"),
+  changePercent: String(payload.changePercent ?? payload.P ?? payload.percent ?? "0"),
+  high24h: String(payload.high24h ?? payload.h ?? payload.high ?? "0"),
+  low24h: String(payload.low24h ?? payload.l ?? payload.low ?? "0"),
+  volumeBase: String(payload.volumeBase ?? payload.v ?? payload.volume ?? "0"),
+  volumeQuote: String(payload.volumeQuote ?? payload.q ?? payload.quoteVolume ?? "0"),
+});
+
+const parseOrderbookSide = (items: any[]): { price: number; quantity: number }[] =>
+  items?.map(([price, quantity]: [string, string]) => ({
+    price: parseFloat(price),
+    quantity: parseFloat(quantity),
+  })) ?? [];
+
 export const useSpotTradingStore = create<SpotTradingDataState>((set) => ({
-  latestBlock: 13918772,
-  setLatestBlock: (value: number) => set({ latestBlock: value }),
-  candles: [
-    { time: (Math.floor(Date.now() / 1000) - 3600) as Time, open: 50000, high: 50500, low: 49900, close: 50200 },
-    { time: (Math.floor(Date.now() / 1000) - 3300) as Time, open: 50200, high: 50700, low: 50100, close: 50400 },
-    { time: (Math.floor(Date.now() / 1000) - 3000) as Time, open: 50400, high: 50800, low: 50300, close: 50600 },
-  ],
+  latestBlock: [],
+  setLatestBlock: (value: any[]) => set({ latestBlock: value }),
+  candles: [],
   setCandles: (data) => set({ candles: data }),
   interval: "1m",
   setInterval: (intv) => set({ interval: intv }),
-  volume: [
-    { time: (Math.floor(Date.now() / 1000) - 3600) as Time, value: 1000 },
-    { time: (Math.floor(Date.now() / 1000) - 3300) as Time, value: 1200 },
-    { time: (Math.floor(Date.now() / 1000) - 3000) as Time, value: 1100 },
-  ],
+  volume: [],
   setVolume: (data) => set({ volume: data }),
   symbol: "BTCUSDT",
   setSymbol: (sym) => set({ symbol: sym }),
-  ticker: { lastPrice: "50000", low24h: "49000", high24h: "51000", changePercent: "2.5", volumeBase: "1000", volumeQuote: "50000000" },
+  ticker: null,
   setTicker: (data) => set({ ticker: data }),
-  tickerChange: [
-    { symbol: "btcusdt", lastPrice: "50000", change24h: "2.5", updatedAt: new Date().toISOString() },
-    { symbol: "ethusdt", lastPrice: "3000", change24h: "-1.2", updatedAt: new Date().toISOString() },
-  ],
+  fundingRate: null,
+  setFundingRate: (data) => set({ fundingRate: data }),
+  tickerChange: [],
   setTickerChange: (data) => set({ tickerChange: data }),
-  orderbook: {
-    asks: [
-      { price: 50100, quantity: 0.5 },
-      { price: 50200, quantity: 1.2 },
-      { price: 50300, quantity: 0.8 },
-      { price: 50400, quantity: 1.5 },
-      { price: 50500, quantity: 0.3 },
-      { price: 50600, quantity: 0.9 },
-      { price: 50700, quantity: 1.1 },
-      { price: 50800, quantity: 0.6 },
-      { price: 50900, quantity: 1.3 },
-      { price: 51000, quantity: 0.7 },
-    ],
-    bids: [
-      { price: 49900, quantity: 0.6 },
-      { price: 49800, quantity: 1.1 },
-      { price: 49700, quantity: 0.9 },
-      { price: 49600, quantity: 1.4 },
-      { price: 49500, quantity: 0.5 },
-      { price: 49400, quantity: 1.2 },
-      { price: 49300, quantity: 0.8 },
-      { price: 49200, quantity: 1.3 },
-      { price: 49100, quantity: 0.7 },
-      { price: 49000, quantity: 0.9 },
-    ],
-  },
+  orderbook: null,
   setOrderbook: (data) => set({ orderbook: data }),
-  summary: { totalBalance: "10000", unrealizedPnL: "250", totalMargin: "5000" },
+  summary: null,
   setSummary: (data) => set({ summary: data }),
 }));
 

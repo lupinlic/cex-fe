@@ -4,57 +4,86 @@ import { Check } from "lucide-react";
 import { useBalanceStore } from "@/store/balanceStore";
 import toast from "react-hot-toast";
 import CustomSelect from "@/components/shared/components/CustomSelect";
-import { coin as coinData } from "@/data/coin";
-import { useGetNetworks } from "@/api/tokenApi";
-import { useGetWithdrawHistory, useWithDraw } from "@/api/balanceApi";
+import { useGetNetworks, useGetTokens } from "@/api/tokenApi";
+import { useGetWithdrawHistory, useWithDraw, useCalculateWithdrawFee } from "@/api/balanceApi";
 
 export default function WithdrawView() {
   const { balances, refreshBalances } = useBalanceStore();
-  const [coin, setCoin] = useState("");
+  const [coin, setCoin] = useState<string | null>(null);
+  const [network, setNetwork] = useState<string | null>(null);
   const [coinId, setCoinId] = useState("");
-  const [network, setNetwork] = useState("");
   const [network_id, setNetwork_id] = useState("");
-  const [address, setAddress] = useState("");
-  const [amount, setAmount] = useState("");
-  const [feeAmount, setFeeAmount] = useState("0");
-  const [minWithdraw, setMinWithdraw] = useState("0");
+  const [address, setAddress] = useState<string>("");
+  const [amount, setAmount] = useState<string>("");
+  const [feeAmount, setFeeAmount] = useState<string>("");
+  const [minWithdraw, setMinWithdraw] = useState<string>("");
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { data: withdrawHistory, refetch: refreshHistory } = useGetWithdrawHistory();
+  const { data: withdrawHistory, refetch: refreshHistory, isLoading: historyLoading } = useGetWithdrawHistory();
 
-  const tokenList = coinData;
+  // Debug: log withdraw history data
+  useEffect(() => {
+    console.log("Withdraw history data:", withdrawHistory);
+    console.log("Withdraw history loading:", historyLoading);
+  }, [withdrawHistory, historyLoading]);
+
+  const { data: tokenList } = useGetTokens();
+
   const coinOptions = useMemo(
-    () => tokenList?.map((t) => t.symbol) ?? [],
-    [tokenList]
+    () => {
+      // Chỉ hiển thị những token có balance > 0
+      const tokensWithBalance = tokenList?.filter((token) => {
+        const fundingBalance = balances.funding.find(
+          (b) => b.token?.asset === token.asset
+        );
+        return Number(fundingBalance?.available || 0) > 0;
+      }) ?? [];
+      return tokensWithBalance.map((t) => t.asset);
+    },
+    [tokenList, balances.funding]
   );
 
   useEffect(() => {
-    const token = tokenList?.find((t) => t.symbol === coin);
-    setCoinId(token?.symbol ?? "");
+    const token = tokenList?.find((t) => t.asset === coin);
+    setCoinId(token?.id ?? "");
     setNetwork("");
-    setNetwork_id("");
-    setFeeAmount("0");
-    setMinWithdraw("0");
-    setAddress("");
-    setAmount("");
   }, [coin, tokenList]);
 
-  const { data: networkList } = useGetNetworks(coinId.toString());
+  const { data: networkList } = useGetNetworks(coinId);
   const networkOptions = useMemo(
     () => networkList?.map((n) => n.network.name) ?? [],
     [networkList]
   );
+  const { calculateFee, isLoading: feeLoading } = useCalculateWithdrawFee();
 
   useEffect(() => {
-    const networkChosen = networkList?.find(
-      (n) => n?.network?.name === network
-    );
-
-    setNetwork_id(networkChosen?.id ?? "");
-    setFeeAmount(networkChosen?.feeWithdraw ?? "0");
-    setMinWithdraw(networkChosen?.feeWithdrawMin ?? "0");
+    const networkchose = networkList?.find((n) => n?.network?.name === network);
+    setNetwork_id(networkchose?.id ?? "");
+    setFeeAmount(networkchose?.feeWithdraw ?? "");
+    setMinWithdraw(networkchose?.feeWithdrawMin ?? "");
   }, [network, networkList]);
+
+  useEffect(() => {
+    if (!coinId || !network_id || !address || !amount) {
+      return;
+    }
+
+    calculateFee({
+      network_id,
+      token_id: coinId,
+      to_address: address,
+      amount,
+    })
+      .then((data) => {
+        if (data?.fee) {
+          setFeeAmount(String(data.fee));
+        }
+      })
+      .catch((err) => {
+        console.error('Withdraw fee calculation failed', err);
+      });
+  }, [coinId, network_id, address, amount, calculateFee]);
 
   const getAvailableBalance = (): number => {
     if (!coin) return 0;
@@ -100,13 +129,17 @@ export default function WithdrawView() {
       setIsLoading(true);
 
       withdraw({
-        network_id,
+        network_id: network_id,
         token_id: coinId,
         to_address: address,
-        amount,
+        amount: amount,
       })
         .then((data) => {
-          toast.success(`Đang xử lý rút ${amount} ${coin} đến địa chỉ ${address}`);
+          console.log("Rút tiền thành công:", data);
+          toast.success(
+            `Đang xử lý rút ${amount} ${coin} đến địa chỉ ${address}`
+          );
+
           refreshBalances();
           refreshHistory();
 
@@ -182,7 +215,8 @@ export default function WithdrawView() {
       </div>
 
       <div className="w-full max-w-[460px] mt-6 space-y-12">
-        <CustomSelect
+        <div>
+          <CustomSelect
           label="Chọn đồng coin"
           options={coinOptions}
           value={coin ?? ""}
@@ -191,8 +225,17 @@ export default function WithdrawView() {
             setAmount("");
           }}
         />
-
-        {coin && (
+          {coin && (
+          <div className="px-1 pt-1">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] text-gray-400">Số dư khả dụng</span>
+              <span className="text-[10px] text-gray-400">
+                {availableBalance.toFixed(2)} {coin}
+              </span>
+            </div>
+          </div>
+        )}
+        </div>
           <div className="mb-2">
             <label className="block mb-3 text-sm">Rút về</label>
             <div className="flex gap-2">
@@ -204,7 +247,6 @@ export default function WithdrawView() {
               </button>
             </div>
           </div>
-        )}
 
         {coin && (
           <>
@@ -358,24 +400,30 @@ export default function WithdrawView() {
             Giao dịch rút tiền gần đây
           </h3>
           <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto">
-            {withdrawHistory?.length === 0 ? (
+            {historyLoading ? (
+              <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm">
+                Đang tải lịch sử rút tiền...
+              </div>
+            ) : !withdrawHistory || withdrawHistory.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-gray-500 text-sm">
                 📄 Không có lịch sử rút tiền gần đây
               </div>
             ) : (
-              withdrawHistory?.slice(0, 10).map((tx) => (
+              withdrawHistory.slice(0, 10).map((tx) => (
                 <div
                   key={tx.id}
                   className="flex justify-between items-center bg-gray-800/50 rounded px-3 py-2 hover:bg-gray-700/70 transition-all text-xs"
                 >
                   <div className="flex flex-col">
                     <span>
-                      {tx.amount} {tx.token.asset}
+                      {tx.amount} {tx.token?.asset ?? ""}
                     </span>
                     <span className="text-gray-400 truncate max-w-[200px]">
                       {tx.excuAddress}
                     </span>
-                    <span>{tx.txHash}</span>
+                    <span className="text-gray-500 text-[10px] mt-1">
+                      {tx.txHash ? `Tx: ${tx.txHash.slice(0, 10)}...` : ""}
+                    </span>
                     <span className="text-gray-500 text-[10px] mt-1">
                       {new Date(tx.createdAt).toLocaleString()}
                     </span>

@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LineChart, Line, ResponsiveContainer } from "recharts";
 import { ChevronDown, Eye, Search, Inbox, MoreVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useBalanceStore } from "@/store/balanceStore";
+
 interface BalanceItem {
   token?: { asset?: string };
   available?: string | number;
@@ -11,7 +12,39 @@ interface BalanceItem {
 
 export default function BalanceView() {
   const [activeTab, setActiveTab] = useState<"taiSan" | "taiKhoan">("taiSan");
-  const { balances, rates } = useBalanceStore();
+  const { balances, rates, isLoading, error, refreshBalances } = useBalanceStore();
+  const router = useRouter();
+
+  useEffect(() => {
+    refreshBalances();
+  }, [refreshBalances]);
+
+  const handleTransferClick = () => {
+    router.push("/balance/tranfer");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+          <p className="mt-4 text-muted-foreground">Đang tải dữ liệu...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background text-foreground p-6 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive text-lg font-semibold">{error}</p>
+          <p className="text-muted-foreground mt-2">Vui lòng thử lại sau</p>
+        </div>
+      </div>
+    );
+  }
+
   // Dữ liệu ví dụ cho biểu đồ nhỏ
   const chartData = [
     { value: 5 },
@@ -74,12 +107,6 @@ export default function BalanceView() {
       ? parseFloat(((acc.amount / total) * 100).toFixed(2))
       : 0;
   });
-
-  const router = useRouter();
-
-  const handleTransferClick = () => {
-    router.push("/balance/tranfer");
-  };
 
   return (
     <div className="min-h-screen bg-background text-foreground p-6 space-y-6">

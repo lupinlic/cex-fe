@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { balanceApi, type BalanceItem as ApiBalanceItem, type BalanceResponse as ApiBalanceResponse } from "@/services/balanceApi";
 
 export interface BalanceToken {
   asset: string;
@@ -22,84 +23,82 @@ export interface Balances {
 export interface BalanceState {
   balances: Balances;
   rates: Record<string, number>;
+  isLoading: boolean;
+  error: string | null;
   setBalances: (next: Balances) => void;
   setRates: (next: Record<string, number>) => void;
-  refreshBalances: () => void;
+  refreshBalances: () => Promise<void>;
+  refreshRates: () => void;
   transfer: (payload: {
     fromWalletType: "SPOT" | "FUNDING" | "FUTURES";
     toWalletType: "SPOT" | "FUNDING" | "FUTURES";
-    amount: number;
+    amount: string;
     assetToken: string;
   }) => Promise<void>;
 }
 
-export const fakeBalances: Balances = {
-  spot: [
-    { token: { asset: "BTC" }, available: "0.012", locked: "0.003", avg_price: 62000, pnl: 120.5 },
-    { token: { asset: "ETH" }, available: "0.34", locked: "0.06", avg_price: 3300, pnl: 16.4 },
-    { token: { asset: "USDT" }, available: "450", locked: "0" },
-  ],
-  funding: [
-    { token: { asset: "USDT" }, available: "250.5", reserved: "0", locked: "0" },
-    { token: { asset: "BUSD" }, available: "150", reserved: "0", locked: "0" },
-  ],
-  futures: [
-    { token: { asset: "ETH" }, available: "0.08", reserved: "0", locked: "0" },
-    { token: { asset: "BTC" }, available: "0.001", reserved: "0", locked: "0" },
-  ],
+const normalizeBalanceItem = (item: ApiBalanceItem): BalanceItem => ({
+  token: { asset: item.asset },
+  available: item.available,
+  locked: item.locked,
+  reserved: String(item.reserved ?? 0),
+});
+
+const normalizeBalances = (data: ApiBalanceResponse): Balances => ({
+  spot: data.spot?.map(normalizeBalanceItem) ?? [],
+  funding: data.funding?.map(normalizeBalanceItem) ?? [],
+  futures: data.futures?.map(normalizeBalanceItem) ?? [],
+});
+
+const emptyBalances: Balances = {
+  spot: [],
+  funding: [],
+  futures: [],
 };
 
-export const fakeRates: Record<string, number> = {
+const defaultRates: Record<string, number> = {
   USDT: 1,
-  BUSD: 1,
-  BTC: 62000,
-  ETH: 3300,
-  LTC: 110,
-  XRP: 0.45,
 };
 
 export const useBalanceStore = create<BalanceState>((set) => ({
-  balances: fakeBalances,
-  rates: fakeRates,
+  balances: emptyBalances,
+  rates: defaultRates,
+  isLoading: true,
+  error: null,
   setBalances: (next) => set({ balances: next }),
   setRates: (next) => set({ rates: next }),
-  refreshBalances: () => {
-    // TODO: Implement API call to refresh balances
-    console.log('Refreshing balances...');
+  refreshBalances: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await balanceApi.getBalances();
+      set({ balances: normalizeBalances(response), isLoading: false });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Failed to fetch balances";
+      console.error("Failed to refresh balances:", error);
+      set({ error: errorMessage, isLoading: false });
+    }
+  },
+  refreshRates: () => {
+    console.log("refreshRates called");
   },
   transfer: async ({ fromWalletType, toWalletType, amount, assetToken }) => {
-    set((state) => {
-      const copy = JSON.parse(JSON.stringify(state.balances)) as Balances;
-      const wallets: Record<string, BalanceItem[]> = {
-        SPOT: copy.spot,
-        FUNDING: copy.funding,
-        FUTURES: copy.futures,
-      };
+    try {
+      const result = await balanceApi.transfer({
+        fromWalletType,
+        toWalletType,
+        assetToken,
+        amount,
+      });
 
-      const from = wallets[fromWalletType];
-      const to = wallets[toWalletType];
-      const assetKey = assetToken.toUpperCase();
-
-      const fromItem = from.find((item) => item.token.asset.toUpperCase() === assetKey);
-      if (!fromItem) return state;
-
-      const fromAvailable = Number(fromItem.available || "0");
-      if (fromAvailable < amount) return state;
-
-      fromItem.available = String(fromAvailable - amount);
-
-      let toItem = to.find((item) => item.token.asset.toUpperCase() === assetKey);
-      if (!toItem) {
-        toItem = { token: { asset: assetToken }, available: String(0) };
-        to.push(toItem);
+      if (!result.success) {
+        throw new Error(result.message || "Transfer failed");
       }
 
-      toItem.available = String(Number(toItem.available || "0") + amount);
-
-      return {
-        ...state,
-        balances: copy,
-      };
-    });
+      const response = await balanceApi.getBalances();
+      set({ balances: normalizeBalances(response) });
+    } catch (error) {
+      console.error("Transfer failed:", error);
+      throw error;
+    }
   },
 }));
