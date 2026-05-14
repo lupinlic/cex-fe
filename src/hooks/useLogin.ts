@@ -87,9 +87,10 @@ export function useLogin(): UseLoginReturn {
       // Show success toast
       toast.success(`Chào mừng ${data.user.email}! Đăng nhập thành công.`);
 
-      // Redirect to dashboard or home after a short delay to show toast
+      // Redirect to the correct layout based on role
       setTimeout(() => {
-        router.push("/");
+        const destination = data.user.role === "admin" ? "/admin" : "/";
+        router.push(destination);
       }, 1000);
     },
     onError: (error: any) => {

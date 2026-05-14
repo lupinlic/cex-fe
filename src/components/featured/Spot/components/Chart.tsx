@@ -52,7 +52,6 @@ export default function Chart() {
   const { theme } = useTheme();
   const { candles, interval, setInterval, volume, symbol, ticker } =
     useSpotTradingData();
-    console.log("Candles in Chart component:", candles);
   const chartContainerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);

@@ -59,7 +59,7 @@ export default function WithdrawView() {
 
   useEffect(() => {
     const networkchose = networkList?.find((n) => n?.network?.name === network);
-    setNetwork_id(networkchose?.id ?? "");
+    setNetwork_id(networkchose?.network?.id ?? "");
     setFeeAmount(networkchose?.feeWithdraw ?? "");
     setMinWithdraw(networkchose?.feeWithdrawMin ?? "");
   }, [network, networkList]);
@@ -84,6 +84,7 @@ export default function WithdrawView() {
         console.error('Withdraw fee calculation failed', err);
       });
   }, [coinId, network_id, address, amount, calculateFee]);
+  console.log("Calculated fee:", network_id);
 
   const getAvailableBalance = (): number => {
     if (!coin) return 0;
@@ -135,9 +136,8 @@ export default function WithdrawView() {
         amount: amount,
       })
         .then((data) => {
-          console.log("Rút tiền thành công:", data);
           toast.success(
-            `Đang xử lý rút ${amount} ${coin} đến địa chỉ ${address}`
+            `Đã xử lý rút ${amount} ${coin} đến địa chỉ ${address}`
           );
 
           refreshBalances();
@@ -150,6 +150,12 @@ export default function WithdrawView() {
         .catch((err) => {
           console.error("Lỗi rút tiền:", err);
           toast.error(err.message || "Rút tiền thất bại");
+          console.error("Withdraw error details:", {
+            network_id,
+            token_id: coinId,
+            to_address: address,
+            amount,
+          });
         })
         .finally(() => {
           setIsLoading(false);

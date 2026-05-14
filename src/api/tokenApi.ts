@@ -2,17 +2,26 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { axiosInstance } from "@/lib/axios";
+import { usePost } from "@/hooks/useApi";
 
 export interface TokenItem {
   id: string;
   asset: string;
   name: string;
-  symbol: string;
+  symbol?: string;
+  is_native: boolean;
+}
+
+export interface CreateTokenPayload {
+  asset: string;
+  name: string;
+  is_native: boolean;
 }
 
 export interface NetworkItem {
   id: string;
   network: {
+    id: string;
     name: string;
     vmSystem: {
       name: string;
@@ -28,8 +37,12 @@ const API_BASE2 = process.env.NEXT_PUBLIC_API_URL2;
 export function useGetTokens() {
   return useQuery<TokenItem[]>({
     queryKey: ["tokens"],
-    queryFn: () => axiosInstance.get<TokenItem[]>(`${API_BASE}/tokens`).then((res) => res.data),
+    queryFn: () => axiosInstance.get<TokenItem[]>("/tokens").then((res) => res.data),
   });
+}
+
+export function useCreateToken() {
+  return usePost<TokenItem, CreateTokenPayload>("/tokens");
 }
 
 export function useGetNetworks(id?: string) {

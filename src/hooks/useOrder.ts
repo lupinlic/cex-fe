@@ -90,7 +90,7 @@ export function useOrderHistory(marketTokenId?: string) {
 export function useLedger(assetToken?: string) {
   const queryKey = assetToken ? ['ledger', assetToken] as const : ['ledger'] as const;
   const queryString = assetToken
-    ? `?walletType=SPOT&assetToken=${assetToken}`
+    ? `?walletType=SPOT&assetToken=${assetToken.slice(0, -4).toUpperCase()}`
     : '?walletType=SPOT';
 
   return useGet(`/ledger${queryString}`, queryKey, {

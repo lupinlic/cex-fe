@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { axiosInstance } from "@/lib/axios";
 import { balanceApi, type BalanceItem as ApiBalanceItem, type BalanceResponse as ApiBalanceResponse } from "@/services/balanceApi";
 
 export interface BalanceToken {
@@ -28,7 +29,7 @@ export interface BalanceState {
   setBalances: (next: Balances) => void;
   setRates: (next: Record<string, number>) => void;
   refreshBalances: () => Promise<void>;
-  refreshRates: () => void;
+  refreshRates: () => Promise<void>;
   transfer: (payload: {
     fromWalletType: "SPOT" | "FUNDING" | "FUTURES";
     toWalletType: "SPOT" | "FUNDING" | "FUTURES";
@@ -78,8 +79,23 @@ export const useBalanceStore = create<BalanceState>((set) => ({
       set({ error: errorMessage, isLoading: false });
     }
   },
-  refreshRates: () => {
-    console.log("refreshRates called");
+  refreshRates: async () => {
+    try {
+      const response = await axiosInstance.get<{ symbol: string; lastPrice: string }[]>("/ticker/24hr");
+      const tickerData = response.data ?? [];
+      const nextRates = tickerData.reduce<Record<string, number>>((acc, item) => {
+        const symbol = item.symbol?.toUpperCase() || "";
+        if (symbol.endsWith("USDT")) {
+          const asset = symbol.slice(0, -4);
+          acc[asset] = Number(item.lastPrice) || 0;
+        }
+        return acc;
+      }, { USDT: 1 });
+
+      set({ rates: { USDT: 1, ...nextRates } });
+    } catch (error) {
+      console.error("Failed to refresh ticker rates:", error);
+    }
   },
   transfer: async ({ fromWalletType, toWalletType, amount, assetToken }) => {
     try {

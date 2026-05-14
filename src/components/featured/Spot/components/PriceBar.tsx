@@ -38,7 +38,6 @@ export default function PriceBar({
   }, [ticker?.lastPrice]);
 
   const lastPriceNumber = Number(ticker?.lastPrice ?? 0);
-  console.log("Ticker :", ticker);
 
 
   return (

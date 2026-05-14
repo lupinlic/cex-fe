@@ -12,12 +12,13 @@ interface BalanceItem {
 
 export default function BalanceView() {
   const [activeTab, setActiveTab] = useState<"taiSan" | "taiKhoan">("taiSan");
-  const { balances, rates, isLoading, error, refreshBalances } = useBalanceStore();
+  const { balances, rates, isLoading, error, refreshBalances, refreshRates } = useBalanceStore();
   const router = useRouter();
 
   useEffect(() => {
     refreshBalances();
-  }, [refreshBalances]);
+    refreshRates();
+  }, [refreshBalances, refreshRates]);
 
   const handleTransferClick = () => {
     router.push("/balance/tranfer");
