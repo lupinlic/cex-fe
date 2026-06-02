@@ -436,14 +436,18 @@ export default function WithdrawView() {
                   </div>
                   <span
                     className={`px-2 py-1 rounded-full text-[10px] font-medium ${
-                      tx.status === "confirmed"
+                      tx.status === "broadcasted"
                         ? "bg-green-500/20 text-green-400"
                         : tx.status === "pending"
                         ? "bg-yellow-500/20 text-yellow-400"
                         : "bg-red-500/20 text-red-400"
                     }`}
                   >
-                    {tx.status}
+                    {tx.status === "broadcasted"
+                      ? "completed"
+                      : tx.status === "pending"
+                      ? "Đang chờ"
+                      : "failed"}
                   </span>
                 </div>
               ))
