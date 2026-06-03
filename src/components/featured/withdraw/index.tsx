@@ -444,10 +444,10 @@ export default function WithdrawView() {
                     }`}
                   >
                     {tx.status === "broadcasted"
-                      ? "Confirmed"
+                      ? "completed"
                       : tx.status === "pending"
                       ? "Đang chờ"
-                      : "Failed"}
+                      : "failed"}
                   </span>
                 </div>
               ))
